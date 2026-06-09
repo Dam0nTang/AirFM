@@ -1,0 +1,26 @@
+{
+  "name": "AirFM",
+  "short_name": "AirFM",
+  "description": "A personal AI music radio DJ.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#10101b",
+  "theme_color": "#7af0b9",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/claudio-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/claudio-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

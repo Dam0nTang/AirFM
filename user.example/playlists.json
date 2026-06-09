@@ -1,0 +1,12 @@
+{
+  "seedPlaylists": [
+    {
+      "name": "Example classics",
+      "tracks": [
+        { "title": "If", "artist": "Bread" },
+        { "title": "Wish You Were Here", "artist": "Pink Floyd" },
+        { "title": "Gravity", "artist": "John Mayer" }
+      ]
+    }
+  ]
+}

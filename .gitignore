@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.cache/
+data/
+
+# Local secrets and machine-specific configuration
+.env
+.env.local
+.env.*.local
+
+# Personal profile data and private design notes/assets
+user/
+blueprint/
+
+.DS_Store
+docs/
