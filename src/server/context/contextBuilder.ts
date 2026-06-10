@@ -35,6 +35,15 @@ interface BuildContextInput {
   avoidTracks?: AvoidTrack[];
 }
 
+interface FmProgramContinuationInput extends Omit<BuildContextInput, "userPrompt"> {
+  program: {
+    title: string;
+    reason: string;
+    lastTrack?: RecentPlay;
+    plannedTracks: Array<RecentPlay & { query?: string }>;
+  };
+}
+
 function formatLocalEnvironmentTime(now: Date): string {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
   const display = now.toLocaleString([], {
@@ -133,6 +142,77 @@ export function buildFmProgramPrompt(input: Omit<BuildContextInput, "userPrompt"
     "## Program Direction",
     input.programPrompt ?? "Start a short personal FM program for right now.",
     "Return strict JSON only. Use this exact shape: {\"title\":\"short FM program title\",\"reason\":\"why this program fits now\",\"segments\":[{\"intro\":\"spoken DJ segue for the next exact song\",\"track\":{\"title\":\"exact song title\",\"artist\":\"exact artist or band\",\"genre\":\"specific genre\",\"query\":\"exact song title and artist\",\"reason\":\"why it fits this program\"}}]}. Do not use markdown. Generate 4 to 8 segments. Do not put genre descriptions in query. Avoid duplicate artists unless the user profile strongly asks for them."
+  ].join("\n\n");
+}
+
+function buildFmBaseSections(input: Omit<BuildContextInput, "userPrompt">): string[] {
+  const recent = input.recentPlays
+    .map((play) => `- ${play.title}${play.artist ? ` / ${play.artist}` : ""}`)
+    .join("\n");
+  const conversation = (input.conversation ?? [])
+    .slice(-8)
+    .map((message) => `${message.role}: ${message.text}`)
+    .join("\n");
+  const avoidTracks = (input.avoidTracks ?? [])
+    .slice(-30)
+    .map((track) => `- ${track.title ?? track.query}${track.artist ? ` / ${track.artist}` : ""}`)
+    .join("\n");
+
+  return [
+    "## System DJ Persona",
+    input.persona,
+    "## User Taste",
+    input.profile.taste,
+    "## User Routines",
+    input.profile.routines,
+    "## Playlist Seeds",
+    input.profile.playlists,
+    "## Mood Rules",
+    input.profile.moodRules,
+    "## Current Environment",
+    formatLocalEnvironmentTime(input.now),
+    `Weather: ${input.weather ?? "unavailable"}`,
+    "## Recent Plays",
+    recent || "No recent plays.",
+    "## Recent Conversation",
+    conversation || "No previous conversation.",
+    "## Do Not Recommend",
+    avoidTracks || "No rejected tracks yet."
+  ];
+}
+
+export function buildFmFirstSegmentPrompt(input: Omit<BuildContextInput, "userPrompt">): string {
+  return [
+    ...buildFmBaseSections(input),
+    "## Task",
+    "Start a personal FM radio program for right now.",
+    "Generate exactly 1 segment so playback can begin quickly.",
+    "The intro must introduce the next exact song and naturally mention the song or artist.",
+    "Return only one JSON object. Do not add greetings, explanations, headings, markdown fences, or prose before or after the JSON.",
+    "Return strict JSON only. Use this exact shape: {\"title\":\"short FM program title\",\"reason\":\"why this program fits now\",\"segments\":[{\"intro\":\"spoken DJ segue for the next exact song\",\"track\":{\"title\":\"exact song title\",\"artist\":\"exact artist or band\",\"genre\":\"specific genre\",\"query\":\"exact song title and artist\",\"reason\":\"why it fits this program\"}}]}. Generate exactly 1 segment. Do not put genre descriptions in query. The query must be only exact song title and artist."
+  ].join("\n\n");
+}
+
+export function buildFmContinuationPrompt(input: FmProgramContinuationInput): string {
+  const plannedTracks = input.program.plannedTracks
+    .map((track) => `- ${track.title}${track.artist ? ` / ${track.artist}` : ""}${track.query ? ` (${track.query})` : ""}`)
+    .join("\n");
+
+  return [
+    ...buildFmBaseSections(input),
+    "## Existing FM Program",
+    `Title: ${input.program.title}`,
+    `Reason: ${input.program.reason}`,
+    `Last track: ${input.program.lastTrack ? `${input.program.lastTrack.title}${input.program.lastTrack.artist ? ` / ${input.program.lastTrack.artist}` : ""}` : "No track has played yet."}`,
+    "Already planned tracks:",
+    plannedTracks || "No tracks planned yet.",
+    "## Task",
+    "Continue the existing FM radio program with a coherent next act.",
+    "Generate 3 to 5 segments that continue the same mood, host voice, and musical arc.",
+    "The first continuation intro must naturally connect from the last track into the next exact song.",
+    "Do not repeat any already planned tracks or artists unless strongly justified by the user profile.",
+    "Return only one JSON object. Do not add greetings, explanations, headings, markdown fences, or prose before or after the JSON.",
+    "Return strict JSON only. Use this exact shape: {\"title\":\"same or compatible FM program title\",\"reason\":\"why this continuation fits\",\"segments\":[{\"intro\":\"spoken DJ segue for the next exact song\",\"track\":{\"title\":\"exact song title\",\"artist\":\"exact artist or band\",\"genre\":\"specific genre\",\"query\":\"exact song title and artist\",\"reason\":\"why it fits this program\"}}]}. Generate 3 to 5 segments. Do not put genre descriptions in query. The query must be only exact song title and artist."
   ].join("\n\n");
 }
 

@@ -104,8 +104,8 @@ async function fetchSongUrl(
   options: NeteaseResolveOptions
 ): Promise<string | undefined> {
   return (
-    (await fetchUrlFromEndpoint(baseUrl, "/song/url/v1", songId, options)) ??
-    fetchUrlFromEndpoint(baseUrl, "/song/url", songId, options)
+    (await fetchUrlFromEndpoint(baseUrl, "/song/url", songId, options)) ??
+    fetchUrlFromEndpoint(baseUrl, "/song/url/v1", songId, options)
   );
 }
 

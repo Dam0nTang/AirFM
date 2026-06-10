@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/server/app";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("radio API", () => {
   it("creates a queue from chat prompt", async () => {
@@ -546,7 +556,7 @@ describe("radio API", () => {
     await app.close();
   });
 
-  it("starts FM after resolving only the first two song URLs", async () => {
+  it("starts FM after resolving only the first song URL", async () => {
     const resolvedQueries: string[] = [];
     const app = await createApp({
       agent: {
@@ -587,8 +597,218 @@ describe("radio API", () => {
     const songs = response.json().state.queue.filter((item: { kind: string }) => item.kind === "song");
 
     expect(response.statusCode).toBe(200);
-    expect(resolvedQueries).toEqual(["Song 1 Artist", "Song 2 Artist"]);
-    expect(songs.map((song: { url?: string }) => Boolean(song.url))).toEqual([true, true, false, false]);
+    expect(resolvedQueries).toEqual(["Song 1 Artist"]);
+    expect(songs.map((song: { url?: string }) => Boolean(song.url))).toEqual([true, false, false, false]);
+
+    await app.close();
+  });
+
+  it("returns FM start before background continuation resolves", async () => {
+    const continuation = deferred<{
+      title: string;
+      reason: string;
+      segments: Array<{
+        intro: string;
+        track: { query: string; title: string; artist: string; reason: string };
+      }>;
+    }>();
+    let continuationCalls = 0;
+    const app = await createApp({
+      agent: {
+        plan: async () => ({
+          say: "Intro",
+          play: [],
+          reason: "unused"
+        }),
+        planFm: async () => ({
+          title: "Late Night AirFM",
+          reason: "matches the evening",
+          segments: [
+            {
+              intro: "Opening segue",
+              track: {
+                query: "Song 1 Artist",
+                title: "Song 1",
+                artist: "Artist",
+                reason: "fits"
+              }
+            }
+          ]
+        }),
+        planFmContinuation: async () => {
+          continuationCalls += 1;
+          return continuation.promise;
+        }
+      },
+      tts: { synthesize: async (text) => `/.cache/tts/${text}.mp3` },
+      music: {
+        resolve: async (request) => ({
+          title: request.title ?? request.query,
+          artist: request.artist,
+          url: `https://x/${request.query}.mp3`,
+          source: "netease"
+        })
+      }
+    });
+
+    const response = await app.inject({ method: "POST", url: "/api/fm/start" });
+
+    expect(response.statusCode).toBe(200);
+    expect(continuationCalls).toBe(1);
+    expect(response.json().state.queue.map((item: { title: string }) => item.title)).toEqual([
+      "FM Segue 1",
+      "Song 1"
+    ]);
+
+    continuation.resolve({ title: "Late Night AirFM", reason: "more", segments: [] });
+    await vi.waitFor(async () => {
+      const now = await app.inject({ method: "GET", url: "/api/now" });
+      expect(now.json().queue).toHaveLength(2);
+    });
+    await app.close();
+  });
+
+  it("appends FM continuation segments to the active program", async () => {
+    const app = await createApp({
+      agent: {
+        plan: async () => ({
+          say: "Intro",
+          play: [],
+          reason: "unused"
+        }),
+        planFm: async () => ({
+          title: "Late Night AirFM",
+          reason: "matches the evening",
+          segments: [
+            {
+              intro: "Opening segue",
+              track: {
+                query: "Song 1 Artist",
+                title: "Song 1",
+                artist: "Artist",
+                reason: "fits"
+              }
+            }
+          ]
+        }),
+        planFmContinuation: async () => ({
+          title: "Late Night AirFM",
+          reason: "continues the arc",
+          segments: [
+            {
+              intro: "After Song 1, keep drifting into Song 2.",
+              track: {
+                query: "Song 2 Artist",
+                title: "Song 2",
+                artist: "Artist",
+                reason: "keeps the flow"
+              }
+            },
+            {
+              intro: "Song 2 opens the door for Song 3.",
+              track: {
+                query: "Song 3 Artist",
+                title: "Song 3",
+                artist: "Artist",
+                reason: "continues the flow"
+              }
+            }
+          ]
+        })
+      },
+      tts: { synthesize: async (text) => `/.cache/tts/${text}.mp3` },
+      music: {
+        resolve: async (request) => ({
+          title: request.title ?? request.query,
+          artist: request.artist,
+          url: `https://x/${request.query}.mp3`,
+          source: "netease"
+        })
+      }
+    });
+
+    const response = await app.inject({ method: "POST", url: "/api/fm/start" });
+    const programId = response.json().state.fmProgram.id;
+
+    await vi.waitFor(async () => {
+      const now = await app.inject({ method: "GET", url: "/api/now" });
+      expect(now.json().queue.map((item: { title: string }) => item.title)).toEqual([
+        "FM Segue 1",
+        "Song 1",
+        "FM Segue 2",
+        "Song 2",
+        "FM Segue 3",
+        "Song 3"
+      ]);
+    });
+
+    const now = await app.inject({ method: "GET", url: "/api/now" });
+    expect(now.json().queue.every((item: { programId: string }) => item.programId === programId)).toBe(true);
+    expect(now.json().queue[2]).toMatchObject({ kind: "voice", url: "/.cache/tts/After Song 1, keep drifting into Song 2..mp3" });
+    expect(now.json().queue[3]).toMatchObject({ kind: "song", playbackStatus: "ready" });
+    expect(now.json().fmProgram.messages).toHaveLength(6);
+    expect(now.json().fmProgram.messages.at(-1)).toMatchObject({
+      type: "nowPlaying",
+      title: "Song 3",
+      segmentIndex: 2
+    });
+
+    await app.close();
+  });
+
+  it("does not interrupt active FM playback when continuation planning fails", async () => {
+    const app = await createApp({
+      agent: {
+        plan: async () => ({
+          say: "Intro",
+          play: [],
+          reason: "unused"
+        }),
+        planFm: async () => ({
+          title: "Late Night AirFM",
+          reason: "matches the evening",
+          segments: [
+            {
+              intro: "Opening segue",
+              track: {
+                query: "Song 1 Artist",
+                title: "Song 1",
+                artist: "Artist",
+                reason: "fits"
+              }
+            }
+          ]
+        }),
+        planFmContinuation: async () => {
+          throw new Error("Claude output was not valid FM JSON");
+        }
+      },
+      tts: { synthesize: async (text) => `/.cache/tts/${text}.mp3` },
+      music: {
+        resolve: async (request) => ({
+          title: request.title ?? request.query,
+          artist: request.artist,
+          url: `https://x/${request.query}.mp3`,
+          source: "netease"
+        })
+      }
+    });
+
+    const response = await app.inject({ method: "POST", url: "/api/fm/start" });
+
+    await vi.waitFor(async () => {
+      const now = await app.inject({ method: "GET", url: "/api/now" });
+      expect(now.json().status).toBe("playing");
+    });
+
+    const now = await app.inject({ method: "GET", url: "/api/now" });
+    expect(response.statusCode).toBe(200);
+    expect(now.json()).toMatchObject({
+      status: "playing",
+      playbackMode: "fm",
+      currentIndex: 0
+    });
+    expect(now.json().queue).toHaveLength(2);
 
     await app.close();
   });
@@ -699,7 +919,7 @@ describe("radio API", () => {
     const response = await app.inject({ method: "POST", url: "/api/fm/start" });
 
     expect(response.statusCode).toBe(200);
-    expect(synthesized).toEqual(["Segue 1", "Segue 2"]);
+    expect(synthesized).toEqual(["Segue 1"]);
 
     await app.close();
   });

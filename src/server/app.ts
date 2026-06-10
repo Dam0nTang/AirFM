@@ -39,6 +39,12 @@ interface Services {
       messages: PlaybackState["messages"],
       avoidTracks: Array<{ title?: string; artist?: string; query?: string }>
     ): Promise<ValidFmProgram>;
+    planFmContinuation?(
+      fmProgram: FmProgramState,
+      queue: PlaybackState["queue"],
+      messages: PlaybackState["messages"],
+      avoidTracks: Array<{ title?: string; artist?: string; query?: string }>
+    ): Promise<ValidFmProgram>;
   };
   tts: { synthesize(text: string): Promise<string> };
   music: { resolve(request: SongResolveRequest): Promise<ResolvedSong | undefined> };
@@ -298,6 +304,108 @@ function buildFmMessages(queue: PlaybackState["queue"], createdAt: string): NonN
   return messages;
 }
 
+function normalizeTrackKey(item: { title?: string; artist?: string; query?: string }): string {
+  return `${item.title ?? item.query ?? ""}::${item.artist ?? ""}`
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}:]+/gu, " ")
+    .trim();
+}
+
+function maxFmSegmentIndex(queue: PlaybackState["queue"]): number {
+  return queue.reduce((max, item) => Math.max(max, item.segmentIndex ?? -1), -1);
+}
+
+function filterNewFmSegments(program: ValidFmProgram, queue: PlaybackState["queue"]): ValidFmProgram {
+  const seen = new Set(
+    queue
+      .filter((item) => item.kind === "song")
+      .map((item) => normalizeTrackKey({ title: item.title, artist: item.artist, query: item.query }))
+      .filter(Boolean)
+  );
+
+  return {
+    ...program,
+    segments: program.segments.filter((segment) => {
+      const key = normalizeTrackKey({
+        title: segment.track.title,
+        artist: segment.track.artist,
+        query: segment.track.query
+      });
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+  };
+}
+
+async function appendFmContinuation(
+  state: PlaybackState,
+  program: ValidFmProgram,
+  services: Services,
+  stream: ReturnType<typeof createStreamHub>
+): Promise<void> {
+  if (!state.fmProgram || state.playbackMode !== "fm" || program.segments.length === 0) {
+    return;
+  }
+
+  const continuation = filterNewFmSegments(program, state.queue);
+  if (continuation.segments.length === 0) {
+    return;
+  }
+
+  const startSegmentIndex = maxFmSegmentIndex(state.queue) + 1;
+  const items = await buildFmQueue({
+    program: continuation,
+    programId: state.fmProgram.id,
+    startSegmentIndex,
+    initialSongResolveLimit: 0,
+    initialVoiceSynthesisLimit: 0,
+    tts: services.tts,
+    music: services.music
+  });
+  const createdAt = new Date().toISOString();
+
+  state.queue.push(...items);
+  state.fmProgram.messages.push(...buildFmMessages(items, createdAt));
+  await prefetchUpcomingSongs(state.queue, state.currentIndex, services.music, services.tts, {
+    fmProgram: state.fmProgram
+  });
+  stream.broadcast({ type: "state", state, program: continuation });
+}
+
+function startFmContinuation(
+  state: PlaybackState,
+  services: Services,
+  stream: ReturnType<typeof createStreamHub>,
+  avoidTracks: Array<{ title?: string; artist?: string; query?: string }>
+): void {
+  if (!services.agent.planFmContinuation || !state.fmProgram) {
+    return;
+  }
+
+  const planFmContinuation = services.agent.planFmContinuation;
+  const fmProgram = state.fmProgram;
+  const programId = state.fmProgram.id;
+  void (async () => {
+    try {
+      const program = await planFmContinuation(
+        fmProgram,
+        state.queue,
+        state.messages,
+        avoidTracks
+      );
+      if (!state.fmProgram || state.fmProgram.id !== programId || state.playbackMode !== "fm") {
+        return;
+      }
+      await appendFmContinuation(state, program, services, stream);
+    } catch {
+      // Continuation is best-effort; the already-started FM program must keep playing.
+    }
+  })();
+}
+
 function refersToCurrentTrack(text: string): boolean {
   return /当前|现在播放|正在播放|这首|这歌|这支歌|介绍一下|讲讲|说说|我喜欢/.test(text);
 }
@@ -452,8 +560,8 @@ export async function createApp(services: Services) {
       const queue = await buildFmQueue({
         program,
         programId,
-        initialSongResolveLimit: 2,
-        initialVoiceSynthesisLimit: 2,
+        initialSongResolveLimit: 1,
+        initialVoiceSynthesisLimit: 1,
         tts: services.tts,
         music: services.music
       });
@@ -472,6 +580,12 @@ export async function createApp(services: Services) {
       };
 
       stream.broadcast({ type: "state", state, program });
+      startFmContinuation(
+        state,
+        services,
+        stream,
+        uniqueAvoid([...avoidedTracks, ...avoidFromQueue(state.queue)])
+      );
       return { state, queue, program };
     } catch (error) {
       state.status = "error";

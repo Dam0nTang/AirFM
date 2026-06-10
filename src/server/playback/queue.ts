@@ -13,6 +13,7 @@ interface QueueDeps {
 interface FmQueueDeps {
   program: ValidFmProgram;
   programId?: string;
+  startSegmentIndex?: number;
   initialSongResolveLimit?: number;
   initialVoiceSynthesisLimit?: number;
   tts: { synthesize(text: string): Promise<string> };
@@ -65,17 +66,19 @@ export async function buildPlaybackQueue(deps: QueueDeps): Promise<QueueItem[]> 
 
 export async function buildFmQueue(deps: FmQueueDeps): Promise<QueueItem[]> {
   const programId = deps.programId ?? nanoid();
+  const startSegmentIndex = deps.startSegmentIndex ?? 0;
   const initialSongResolveLimit = deps.initialSongResolveLimit ?? deps.program.segments.length;
   const initialVoiceSynthesisLimit = deps.initialVoiceSynthesisLimit ?? deps.program.segments.length;
 
   const segmentPromises = deps.program.segments.map(async (segment, index): Promise<[QueueItem, QueueItem]> => {
+    const segmentIndex = startSegmentIndex + index;
     const voiceItem: QueueItem = {
       id: nanoid(),
       kind: "voice",
-      title: `FM Segue ${index + 1}`,
+      title: `FM Segue ${segmentIndex + 1}`,
       text: segment.intro,
       programId,
-      segmentIndex: index,
+      segmentIndex,
       fmRole: "segue"
     };
 
@@ -116,7 +119,7 @@ export async function buildFmQueue(deps: FmQueueDeps): Promise<QueueItem[]> {
           : `${segment.track.reason} · Netease returned no playable audio`,
         source: song?.source ?? "netease",
         programId,
-        segmentIndex: index,
+        segmentIndex,
         fmRole: "song",
         playbackStatus: song?.url ? "ready" : index >= initialSongResolveLimit ? "pending" : "unavailable"
       };

@@ -23,7 +23,7 @@ describe("Netease adapter", () => {
         );
       }
 
-      expect(url).toContain("/song/url/v1");
+      expect(url).toContain("/song/url");
       expect(url).toContain("id=2");
       return new Response(JSON.stringify({ data: [{ url: "https://music.example/hotel.mp3" }] }), {
         status: 200
@@ -62,7 +62,7 @@ describe("Netease adapter", () => {
           );
         }
 
-        expect(url).toContain("/song/url/v1");
+        expect(url).toContain("/song/url");
         expect(url).toContain("id=2");
         return new Response(JSON.stringify({ data: [{ url: "https://music.example/hotel.mp3" }] }), {
           status: 200
@@ -100,7 +100,7 @@ describe("Netease adapter", () => {
           );
         }
 
-        expect(url).toContain("/song/url/v1");
+        expect(url).toContain("/song/url");
         expect(url).toContain("id=2");
         return new Response(JSON.stringify({ data: [{ url: "https://music.example/queen.mp3" }] }), {
           status: 200
@@ -136,15 +136,11 @@ describe("Netease adapter", () => {
           );
         }
 
-        if (url.includes("/song/url/v1") && url.includes("id=1")) {
-          return new Response(JSON.stringify({ data: [{ url: null }] }), { status: 200 });
-        }
-
         if (url.includes("/song/url") && !url.includes("/song/url/v1") && url.includes("id=1")) {
           return new Response(JSON.stringify({ data: [{ url: null }] }), { status: 200 });
         }
 
-        expect(url).toContain("/song/url/v1");
+        expect(url).toContain("/song/url");
         expect(url).toContain("id=2");
         return new Response(JSON.stringify({ data: [{ url: "https://music.example/pink-floyd.mp3" }] }), {
           status: 200
@@ -220,7 +216,7 @@ describe("Netease adapter", () => {
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/song/url"));
   });
 
-  it("falls back to the legacy url endpoint when url v1 is unavailable", async () => {
+  it("falls back to url v1 when the fast legacy endpoint is unavailable", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: URL | RequestInfo) => {
@@ -236,13 +232,13 @@ describe("Netease adapter", () => {
           );
         }
 
-        if (url.includes("/song/url/v1")) {
+        if (url.includes("/song/url") && !url.includes("/song/url/v1")) {
           return new Response(JSON.stringify({ code: 502 }), { status: 502 });
         }
 
-        expect(url).toContain("/song/url");
+        expect(url).toContain("/song/url/v1");
         expect(url).toContain("id=2");
-        return new Response(JSON.stringify({ data: [{ url: "https://music.example/legacy.mp3" }] }), {
+        return new Response(JSON.stringify({ data: [{ url: "https://music.example/v1.mp3" }] }), {
           status: 200
         });
       })
@@ -254,10 +250,10 @@ describe("Netease adapter", () => {
       artist: "Eagles"
     });
 
-    expect(song?.url).toBe("https://music.example/legacy.mp3");
+    expect(song?.url).toBe("https://music.example/v1.mp3");
   });
 
-  it("falls back to the legacy url endpoint when url v1 throws", async () => {
+  it("falls back to url v1 when the fast legacy endpoint throws", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: URL | RequestInfo) => {
@@ -273,13 +269,13 @@ describe("Netease adapter", () => {
           );
         }
 
-        if (url.includes("/song/url/v1")) {
+        if (url.includes("/song/url") && !url.includes("/song/url/v1")) {
           throw new Error("Client network socket disconnected");
         }
 
-        expect(url).toContain("/song/url");
+        expect(url).toContain("/song/url/v1");
         expect(url).toContain("id=2");
-        return new Response(JSON.stringify({ data: [{ url: "https://music.example/legacy.mp3" }] }), {
+        return new Response(JSON.stringify({ data: [{ url: "https://music.example/v1.mp3" }] }), {
           status: 200
         });
       })
@@ -291,7 +287,47 @@ describe("Netease adapter", () => {
       artist: "Eagles"
     });
 
-    expect(song?.url).toBe("https://music.example/legacy.mp3");
+    expect(song?.url).toBe("https://music.example/v1.mp3");
+  });
+
+  it("uses the fast legacy url endpoint before trying url v1", async () => {
+    const seenUrls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | RequestInfo) => {
+        const url = String(input);
+        seenUrls.push(url);
+        if (url.includes("/cloudsearch")) {
+          return new Response(
+            JSON.stringify({
+              result: {
+                songs: [{ id: 2, name: "Gravity", ar: [{ name: "John Mayer" }] }]
+              }
+            }),
+            { status: 200 }
+          );
+        }
+
+        if (url.includes("/song/url/v1")) {
+          throw new Error("slow url v1 endpoint should not be called when legacy url succeeds");
+        }
+
+        expect(url).toContain("/song/url");
+        expect(url).toContain("id=2");
+        return new Response(JSON.stringify({ data: [{ url: "https://music.example/gravity.mp3" }] }), {
+          status: 200
+        });
+      })
+    );
+
+    const song = await resolveNeteaseSong("http://netease.test", {
+      query: "Gravity John Mayer",
+      title: "Gravity",
+      artist: "John Mayer"
+    });
+
+    expect(song?.url).toBe("https://music.example/gravity.mp3");
+    expect(seenUrls.some((url) => url.includes("/song/url/v1"))).toBe(false);
   });
 
   it("passes the configured cookie to Netease API requests", async () => {

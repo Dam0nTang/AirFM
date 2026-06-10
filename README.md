@@ -1,36 +1,39 @@
 # AirFM
 
-AirFM is a local personal AI music radio app. It can chat with you about music, recommend playable songs, generate DJ voice narration with Fish Audio, and run an FM-style program that automatically plays DJ segues and songs in sequence. The frontend is a PWA, so you can install it as a small desktop app from your browser.
+![alt text](image-1.png)![alt text](image-2.png)
+AirFM 是一个本地运行的个人 AI 音乐电台应用。它可以和你聊音乐、根据你的提示推荐可播放歌曲、使用 Fish Audio 生成 DJ 语音播报，并以 FM 节目模式自动串联 DJ 串场词和歌曲播放。前端是 PWA，可以从浏览器安装成一个小型桌面应用。
 
-This project is designed for local personal use. You bring your own Claude CLI, Fish Audio API key, and Netease Music login cookie.
+创意来源：抖音博主@mmguo https://www.douyin.com/user/MS4wLjABAAAAANSG2ii-j-_lUq-b3INlGbfoADdryUYNCXRcWH0a8uE?from_tab_name=main&modal_id=7631240906314063537&vid=7631240906314063537
 
-## Features
+这个项目面向本地个人使用。你需要自己准备 Claude CLI、Fish Audio API Key，以及可选的网易云音乐登录 Cookie。
 
-- Chat mode: ask for music recommendations and play the returned song list.
-- Song info chat: ask about the current or recommended song.
-- FM mode: start an AI-hosted radio program with automatic DJ segues and song playback.
-- PWA frontend: run in a browser during development, or install it as a desktop app.
-- Local profile files: customize taste, routines, mood rules, and playlist seeds.
-- Local cache: generated TTS audio is cached under `.cache/tts`.
+## 功能
 
-## Requirements
+- Chat 模式：输入音乐需求，获得推荐歌曲列表并点击播放。
+- 歌曲介绍：询问当前歌曲或推荐列表中歌曲的创作者、发行信息、风格和特点。
+- FM 模式：启动一个由 AI 主持的电台节目，自动播放 DJ 串场词和歌曲。
+- PWA 前端：开发时可在浏览器中访问，也可以安装成桌面应用。
+- 本地用户画像：通过文件配置音乐偏好、日常作息、情绪规则和歌单种子。
+- 本地缓存：生成过的 TTS 音频会缓存在 `.cache/tts`。
 
-- Node.js 18 or newer.
-- npm.
-- Claude CLI available from the terminal. The default command is `claude -p --output-format json`.
-- [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi), running locally or on a reachable server.
-- Fish Audio API key and voice id.
-- A Netease Music account cookie if you want access to songs that require login or membership.
+## 环境要求
 
-## Quick Start
+- Node.js 18 或更高版本
+- npm
+- 终端中可用的 Claude CLI。默认命令为 `claude -p --output-format json`。
+- [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)，可以本地运行，也可以部署在可访问的服务器上。
+- Fish Audio API Key 和 Voice ID。
+- 如果你希望播放需要登录或会员权限的歌曲，需要网易云音乐账号 Cookie。
 
-1. Install dependencies:
+## 快速开始
+
+1. 安装依赖：
 
 ```bash
 npm install
 ```
 
-2. Start NeteaseCloudMusicApi with Docker in another terminal:
+2. 在另一个终端中使用 Docker 启动 NeteaseCloudMusicApi：
 
 ```bash
 docker run -d \
@@ -39,15 +42,15 @@ docker run -d \
   binaryify/netease_cloud_music_api
 ```
 
-By default AirFM expects NeteaseCloudMusicApi at `http://localhost:3001`.
+AirFM 默认会从 `http://localhost:3001` 访问 NeteaseCloudMusicApi。
 
-3. Create your local environment file:
+3. 创建本地环境变量文件：
 
 ```bash
 cp .env.example .env
 ```
 
-4. Fill the required values in `.env`:
+4. 在 `.env` 中填写必需配置：
 
 ```env
 FISH_API_KEY=your_fish_audio_api_key
@@ -55,98 +58,91 @@ FISH_VOICE_ID=your_fish_audio_voice_id
 NETEASE_API_BASE=http://localhost:3001
 ```
 
-5. Create your local profile files:
+5. 创建本地用户画像文件：
 
 ```bash
 cp -R user.example user
 ```
 
-Edit files in `user/` to describe your own taste and routines. The `user/` directory is intentionally ignored by git.
+编辑 `user/` 中的文件，写入你自己的音乐偏好、日常习惯和情绪规则。
 
-6. Start the AirFM backend:
+6. 启动 AirFM 后端：
 
 ```bash
 npm run dev
 ```
 
-7. Start the frontend dev server:
+7. 启动前端开发服务：
 
 ```bash
 npm run dev:client
 ```
 
-8. Open the app:
+8. 打开应用：
 
 ```text
 http://localhost:8080
 ```
 
-## Install as a PWA
+## 安装为 PWA
 
-For development, open `http://localhost:8080` in Chrome or Edge and use the browser's install button in the address bar or app menu.
+开发环境下，使用 Chrome 或 Edge 打开 `http://localhost:8080`，然后点击地址栏或浏览器菜单中的安装按钮，即可安装成桌面应用。
 
-For a production-style local preview:
+如果想用更接近生产环境的方式本地预览：
 
 ```bash
 npm run build
 npx vite preview --host 0.0.0.0 --port 8080
 ```
 
-Then open `http://localhost:8080` and install the PWA from the browser. The installed app will use the same local backend URL and still requires the backend and NeteaseCloudMusicApi to be running.
+然后打开 `http://localhost:8080` 并从浏览器安装 PWA。安装后的应用仍然依赖本地后端和 NeteaseCloudMusicApi，因此使用时需要保持它们运行。
 
-## Configuration
+## 配置项
 
-All local configuration lives in `.env`. Do not commit `.env`.
 
-| Variable | Required | Description |
+| 变量 | 是否必填 | 说明 |
 | --- | --- | --- |
-| `PORT` | No | AirFM backend port. Default: `3000`. |
-| `PUBLIC_BASE_URL` | No | Public backend URL for local assets. Default: `http://localhost:3000`. |
-| `DATABASE_PATH` | No | Local SQLite database path. Default: `data/radio-agent.sqlite`. |
-| `CLAUDE_COMMAND` | Yes | Claude command. Default: `claude`. |
-| `CLAUDE_ARGS` | Yes | Claude CLI args. Default: `-p,--output-format,json`. |
-| `NETEASE_API_BASE` | Yes | NeteaseCloudMusicApi base URL. Default: `http://localhost:3001`. |
-| `NETEASE_COOKIE` | No | Optional fallback cookie. Prefer importing cookies in the UI. |
-| `NETEASE_SESSION_PATH` | No | Local file where imported Netease cookie is stored. Default: `data/netease-session.json`. |
-| `FISH_API_KEY` | Yes | Fish Audio API key. |
-| `FISH_VOICE_ID` | Yes | Fish Audio voice/reference id. |
-| `FISH_PROXY` | No | Optional HTTP proxy for Fish Audio requests if your device cannot reach `api.fish.audio` directly. |
-| `OPENWEATHER_API_KEY` | No | Reserved for future weather integrations. |
+| `PORT` | 否 | AirFM 后端端口，默认 `3000`。 |
+| `PUBLIC_BASE_URL` | 否 | 本地资源使用的后端公开地址，默认 `http://localhost:3000`。 |
+| `DATABASE_PATH` | 否 | 本地 SQLite 数据库路径，默认 `data/radio-agent.sqlite`。 |
+| `CLAUDE_COMMAND` | 是 | Claude 命令，默认 `claude`。 |
+| `CLAUDE_ARGS` | 是 | Claude CLI 参数，默认 `-p,--output-format,json`。 |
+| `NETEASE_API_BASE` | 是 | NeteaseCloudMusicApi 地址，默认 `http://localhost:3001`。 |
+| `NETEASE_COOKIE` | 否 | 可选的备用 Cookie。更推荐在应用界面中导入 Cookie。 |
+| `NETEASE_SESSION_PATH` | 否 | 导入的网易云 Cookie 本地保存路径，默认 `data/netease-session.json`。 |
+| `FISH_API_KEY` | 是 | Fish Audio API Key。 |
+| `FISH_VOICE_ID` | 是 | Fish Audio Voice / Reference ID。 |
+| `FISH_PROXY` | 否 | 如果当前设备无法直连 `api.fish.audio`，可以配置 Fish Audio 请求使用的 HTTP 代理。 |
+| `OPENWEATHER_API_KEY` | 否 | 预留给未来天气能力使用。 |
 
-### Fish Audio proxy
+### Fish Audio 代理
 
-If your network cannot connect to Fish Audio directly, set `FISH_PROXY` to a proxy that works on the current device:
+如果你的网络无法直连 Fish Audio，可以把 `FISH_PROXY` 设置为当前设备可用的代理：
 
 ```env
 FISH_PROXY=http://127.0.0.1:7897
 ```
 
+不要直接照抄别人机器上的 `127.0.0.1` 代理配置。`127.0.0.1` 永远表示当前这台电脑。
 
-## Netease Login Cookie
+## 网易云登录 Cookie
 
-NeteaseCloudMusicApi can search public songs without login, but many tracks need a logged-in account or membership to return playable URLs.
+NeteaseCloudMusicApi 需要获取网易云账号登录的cookie才能播放
 
-Recommended flow:
+推荐流程：
 
-1. Open the official Netease Music website in your browser and log in normally.
-2. Open browser DevTools.
-3. Go to the Network or Application/Storage panel.
-4. Find the cookie for the Netease Music domain.
-5. Copy the full cookie string that includes `MUSIC_U=...`.
-6. In AirFM, click `IMPORT COOKIE`.
-7. Paste the cookie and save it.
+1. 在浏览器中打开网易云音乐官网并正常登录。
+2. 打开浏览器开发者工具。
+3. 进入 Network 面板。
+4. 在login请求中找到网易云音乐域名下的 Cookie。
+5. 复制包含 `MUSIC_U=...` 的完整 Cookie 字符串。
+6. 在 AirFM 中点击 `IMPORT COOKIE`。
+7. 粘贴 Cookie 并保存。
 
-AirFM stores the imported cookie locally at:
 
-```text
-data/netease-session.json
-```
+## 本地用户画像
 
-This file is ignored by git. Never publish it.
-
-## Local Profile
-
-AirFM reads profile files from `user/`:
+AirFM 会读取 `user/` 下的用户画像文件：
 
 ```text
 user/taste.md
@@ -155,36 +151,35 @@ user/mood-rules.md
 user/playlists.json
 ```
 
-Start from:
+从示例模板开始：
 
 ```bash
 cp -R user.example user
 ```
 
-Then edit the copied files. Keep personal listening history, routines, and private playlist details out of the open-source repository.
+然后编辑复制出来的文件，写入个人的偏好。
 
+## 常见问题
 
-## Troubleshooting
+### Fish Audio TTS 失败
 
-### Fish Audio TTS fails
+- 确认已设置 `FISH_API_KEY` 和 `FISH_VOICE_ID`。
+- 测试当前设备是否能访问 `https://api.fish.audio`。
+- 如果无法直连，配置当前设备可用的 `FISH_PROXY`。
+- 确认 `FISH_PROXY` 前后没有多余空格。
 
-- Confirm `FISH_API_KEY` and `FISH_VOICE_ID` are set.
-- Test whether your device can reach `https://api.fish.audio`.
-- If direct access fails, configure `FISH_PROXY` with a proxy that works on the current device.
-- Make sure there are no leading or trailing spaces in `FISH_PROXY`.
+### 推荐了歌曲但无法播放
 
-### Songs are recommended but cannot play
+- 确认 NeteaseCloudMusicApi 正在运行。
+- 导入包含 `MUSIC_U` 的网易云 Cookie。
+- 由于版权、会员、地区或 API 限制，一些歌曲仍然可能无法返回可播放链接。
 
-- Confirm NeteaseCloudMusicApi is running.
-- Import a Netease cookie that includes `MUSIC_U`.
-- Some songs still may not return playable URLs due to copyright, membership, region, or API limitations.
+### PWA 打开后没有响应
 
-### The PWA opens but does not respond
+- 保持 AirFM 后端运行。
+- 保持 NeteaseCloudMusicApi 运行。
+- 确认前端开发服务或预览服务正在提供页面。
 
-- Keep the AirFM backend running.
-- Keep NeteaseCloudMusicApi running.
-- Make sure the frontend dev server or preview server is serving the app.
+## 免责声明
 
-## Disclaimer
-
-AirFM is for personal learning, experimentation, and local use. You are responsible for complying with the terms of service and copyright rules of Netease Music, Fish Audio, Anthropic/Claude, and any other services you connect. This project does not provide music files, bypass copyright restrictions, or include any third-party service credentials.
+AirFM 仅用于个人学习、实验和本地使用。你需要自行遵守网易云音乐、Fish Audio、Anthropic / Claude 以及其他接入服务的服务条款和版权规则。本项目不提供音乐文件，不绕过版权限制，也不包含任何第三方服务凭据。
